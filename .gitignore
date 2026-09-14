@@ -5,3 +5,4 @@
 *.log
 nohup.out
 *.json
+.selenium_profile/

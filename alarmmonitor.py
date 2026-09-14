@@ -1,3 +1,9 @@
+"""Launches a kiosk-mode Chrome browser logged into the alarmruf112.eu monitor portal.
+
+Reuses a previously stored monitor URL when possible to skip the login flow, and
+exits once the browser window is closed by the user.
+"""
+
 import os
 import dotenv
 import logging
@@ -5,7 +11,6 @@ from logging.handlers import RotatingFileHandler
 import sys
 import time
 import json
-from requests import options
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
@@ -17,7 +22,7 @@ dotenv.load_dotenv(".env")
 username = os.getenv("ALARM_USERNAME")
 password = os.getenv("ALARM_PASSWORD")
 portal = "monitor"
-selenium_profile_path = os.getenv("SELENIUM_PROFILE_PATH")
+selenium_profile_path = os.getenv("SELENIUM_PROFILE_PATH", ".selenium_profile")
 selenium_binary_path = os.getenv("SELENIUM_BINARY_PATH")
 selenium_driver_path = os.getenv("SELENIUM_DRIVER_PATH")
 
@@ -34,6 +39,11 @@ logging.basicConfig(
 
 
 def selenium_driver():
+    """Build and return a Chrome WebDriver configured for fullscreen kiosk display.
+
+    Uses the persistent profile, binary, and driver paths from the environment
+    when set, so login sessions and browser state survive across restarts.
+    """
     options = ChromeOptions()
     if selenium_profile_path:
         profile_dir = os.path.abspath(selenium_profile_path)
@@ -62,6 +72,15 @@ def selenium_driver():
 
 
 def attempt_stored_login(driver):
+    """Try to reuse a previously saved monitor URL instead of logging in again.
+
+    Args:
+        driver: The Selenium WebDriver to navigate.
+
+    Returns:
+        The monitor URL string if the stored session is still valid, otherwise
+        None (meaning the caller should fall back to a fresh login).
+    """
     if not os.path.exists("monitor_url.json"):
         logging.info("No stored monitor URL found. Continuing with login.")
         return None
@@ -85,6 +104,14 @@ def attempt_stored_login(driver):
 
 
 def login(driver):
+    """Fill in and submit the alarmruf112.eu login form to reach the monitor portal.
+
+    Args:
+        driver: The Selenium WebDriver to navigate and interact with.
+
+    Returns:
+        The URL the browser lands on after a successful login.
+    """
     payload = {
         "data[Page][login]": username,
         "data[Page][password]": password,
@@ -108,10 +135,14 @@ def login(driver):
 
 
 def signal_handler(signum, frame):
+    """Placeholder OS signal handler; currently just logs that a signal arrived."""
     print("Signal received, executing handler...")
 
 
 def main():
+    """Log into the monitor portal (or reuse a stored session) and watch the
+    browser until its DevTools connection drops, indicating the window was closed.
+    """
     driver = selenium_driver()
     monitor_url = attempt_stored_login(driver)
     if not monitor_url:
